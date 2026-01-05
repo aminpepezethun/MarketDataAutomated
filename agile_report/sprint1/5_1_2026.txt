@@ -1,0 +1,15 @@
+5/1/2026
+
+Discussing two approaches for the solution:
+1. Running Docker 
+2. Running Web App
+
+Proposed solution
+Minh: Docker
+- Front-end: Supabase (host)
+- Database: Supabase Postgres 
+- Processor: fly.io (container of the logic)
+
+
+
+
