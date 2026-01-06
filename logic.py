@@ -2,16 +2,23 @@ import sys
 import random
 import time
 import pandas as pd
-from playwright.sync_api import sync_playwright
+import asyncio
+from playwright.async_api import async_playwright
+from playwright_stealth import Stealth
 import io
 from datetime import datetime
+import os
 
 # Fix encoding cho Windows Terminal
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 UPCOMING_URL = "https://www.marketindex.com.au/upcoming-dividends"
 ASX_URL = "https://www.marketindex.com.au/asx/{}"
-USER_DATA_DIR = "./browser_session"
+USER_DATA_DIR = "/Users/ducminhyologmail.com/Library/Application Support/BraveSoftware/Brave-Browser/Default"
+DEBUG_DIR = "./debug"
+os.makedirs(DEBUG_DIR, exist_ok=True)
+
+BRAVE_BROWSER = "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
 
 def parse_international_date(date_str):
     """Chuyển đổi các định dạng ngày sang YYYY-MM-DD."""
@@ -43,64 +50,82 @@ def clean_percent_to_decimal(text):
     val = clean_to_number(text)
     return val / 100 if val is not None else None
 
-def get_element_text_with_retry(page, selector, max_attempts=10):
+async def get_element_text_with_retry(page, selector, max_attempts=10):
     for attempt in range(2):
         try:
-            page.wait_for_selector(selector, timeout=7000)
+            await page.wait_for_selector(selector, timeout=7000)
             for _ in range(max_attempts):
-                raw_val = page.locator(selector).first.inner_text().strip()
+                raw_val = await page.locator(selector).first.inner_text().strip()
                 if raw_val and raw_val not in ['\u2010', '-', '']:
                     return raw_val
-                time.sleep(0.5)
-            if attempt == 0: page.reload(wait_until="domcontentloaded")
+                await asyncio.sleep(0.5)
+            if attempt == 0: 
+                await page.reload(wait_until="domcontentloaded")
         except:
-            if attempt == 0: page.reload(wait_until="domcontentloaded")
+            if attempt == 0: 
+                await page.reload(wait_until="domcontentloaded")
     return "N/A"
 
-def main():
+async def main():
+    counter = 0
     results = []
-    with sync_playwright() as p:
-        context = p.chromium.launch_persistent_context(
-            user_data_dir=USER_DATA_DIR, headless=False, channel="chrome", 
+    async with async_playwright() as p:
+        browser = await p.chromium.launch_persistent_context(
+            user_data_dir=USER_DATA_DIR,
+            executable_path=BRAVE_BROWSER,
+            headless=False,
+            channel='brave',
             args=["--disable-blink-features=AutomationControlled"]
         )
-        page = context.pages[0]
+        # context = p.chromium.launch_persistent_context(
+        #     user_data_dir=USER_DATA_DIR, headless=False, channel="chrome", 
+        #     args=["--disable-blink-features=AutomationControlled"]
+        # )
+        stealth = Stealth()
+        await stealth.apply_stealth_async(browser)
+        page = await browser.new_page()
         
         try:
-            page.goto(UPCOMING_URL, wait_until="networkidle", timeout=60000)
-            page.wait_for_selector("table tbody tr")
+            await page.goto(UPCOMING_URL, wait_until="domcontentloaded", timeout=90000)
+            await page.wait_for_selector("table tbody tr", timeout=90000)
         except Exception as e:
+            screenshot_path = os.path.join(DEBUG_DIR, f"page_error_{counter}.png")
+            await page.screenshot(path=screenshot_path)
+            counter += 1
+
             print(f"Lỗi: {e}")
-            context.close()
+            await browser.close()
             return
 
         rows = page.locator("table tbody tr")
-        count = rows.count()
-        detail_page = context.new_page()
+        count = await rows.count()
+        detail_page = await browser.new_page()
+
+        counter = 0
 
         for i in range(count):
             try:
-                cells = rows.nth(i).locator("td")
-                code = cells.nth(0).inner_text().strip()
+                cells = await rows.nth(i).locator("td")
+                code = await cells.nth(0).inner_text().strip()
                 
                 # Kiểm tra Amount trước để lọc
-                amount_raw = cells.nth(4).inner_text().strip()
+                amount_raw = await cells.nth(4).inner_text().strip()
                 amount_val = clean_to_number(amount_raw)
                 
                 if amount_val is None or amount_val == 0:
                     continue
 
                 # Lấy các thông tin khác từ bảng
-                company = cells.nth(1).inner_text().strip()
+                company = await cells.nth(1).inner_text().strip()
                 ex_date = parse_international_date(cells.nth(3).inner_text().strip())
                 franking = clean_percent_to_decimal(cells.nth(5).inner_text().strip())
                 pay_date = parse_international_date(cells.nth(7).inner_text().strip())
                 yield_val = clean_percent_to_decimal(cells.nth(8).inner_text().strip())
 
                 # Vào trang chi tiết lấy Volume và Price
-                detail_page.goto(ASX_URL.format(code.lower()), wait_until="domcontentloaded")
-                vol_str = get_element_text_with_retry(detail_page, "span[data-quoteapi*='monthAverageVolume']")
-                price_str = get_element_text_with_retry(detail_page, "span[data-quoteapi='price']")
+                await detail_page.goto(ASX_URL.format(code.lower()), wait_until="domcontentloaded")
+                vol_str = await get_element_text_with_retry(detail_page, "span[data-quoteapi*='monthAverageVolume']")
+                price_str = await get_element_text_with_retry(detail_page, "span[data-quoteapi='price']")
 
                 vol_num = clean_to_number(vol_str)
                 price_num = clean_to_number(price_str)
@@ -120,12 +145,16 @@ def main():
                     "4W Volume": vol_num,
                     "Total Value": total_value
                 })
-                time.sleep(random.uniform(0.5, 1.5))
+                await asyncio.sleep(random.uniform(0.5, 1.5))
 
             except Exception as e:
+                screenshot_path = os.path.join(DEBUG_DIR, f"error_{counter}.png")
+                counter += 1
+                await detail_page.screenshot(path=screenshot_path)
                 print(f"Bỏ qua dòng {i}: {e}")
+                continue
 
-        context.close()
+        await browser.close()
 
     if results:
         df = pd.DataFrame(results)
@@ -134,5 +163,4 @@ def main():
         df.to_csv(output, index=False, encoding='utf-8-sig')
         print(f"\nThành công! File '{output}' đã sẵn sàng cho máy đọc.")
 
-if __name__ == "__main__":
-    main()
+asyncio.run(main())
