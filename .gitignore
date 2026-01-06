@@ -2,5 +2,5 @@
 .browser_session/
 
 # VE
-venv/
 .venv/
+venv/
