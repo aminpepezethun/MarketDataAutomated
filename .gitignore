@@ -1,6 +1,16 @@
 # private session
 .browser_session/
+browser_session/
 
 # VE
 .venv/
 venv/
+
+# Python
+__pycache__/
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
