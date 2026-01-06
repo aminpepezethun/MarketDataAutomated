@@ -1,0 +1,6 @@
+# private session
+.browser_session/
+
+# VE
+.venv/
+venv/
