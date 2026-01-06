@@ -1,0 +1,7 @@
+numpy==2.4.0
+pandas==2.3.3
+playwright==1.52.0
+greenlet==3.3.0
+
+
+
