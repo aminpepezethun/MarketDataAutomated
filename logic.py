@@ -27,15 +27,52 @@ def main():
         formats=['html'],
     )
 
+    # HTML object
     html = result.html
     if not html:
         raise RuntimeError("No HTML found from Firecrawl")
+    
+    # Process data 
+    table = process_data(html)
+    if not table:
+        print("Error! No table found.")
+        return
+    
+    # Turn table (dict) into csv
+    dp = pd.DataFrame(table)
 
     # Save
-    output_path = os.path.join(TEST_FOLDER, "upcoming_dividends.html")
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(html)
+    output_path = os.path.join(TEST_FOLDER, f"upcoming_dividends.html")
+    dp.to_csv(output_path, index=False, encoding='utf-8-sig')
+    print(f"Completed saving to {output_path}")
 
     
+    """
+        Process directly?
+            - Use HTML object to locate?
+        
+        Process by saving files?
+        
+        upcoming_dividend_url():
+            - Code
+            - Company
+            - Ex-Date
+            - Amount
+            - Franking
+            - Pay Date
+            - Yield
+            - Price
+        
+        company_specific_url():
+            - 4W Volume
+            - Volume
+            - Last (Price)
 
-    print(f"Completed saving to {output_path}")
+            - Total Volume = 4W Volume * Last (Price)
+        
+            
+        Error class for logging error:
+            - Error at upcoming_dividend_url() not returning any table
+    """
+
+

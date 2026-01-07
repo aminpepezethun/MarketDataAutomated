@@ -8,6 +8,8 @@ import io
 # Fix encoding for Windows Terminal
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
+URL = "https://www.marketindex.com.au/"
+
 def parse_date(date_str):
     """
     Docstring for parse_date
@@ -34,22 +36,21 @@ def clean_to_number(text):
         return float(text.replace('$', '').replace('%', '').replace(',', '').strip())
     except:
         return None
-
-def process_data(html_file):
+    
+def scrape_html_ud(html_source) -> list:
     """
-    Docstring for process_data
-    
-    :param html_file: HTML file object from Firecrawl
-    """ 
-    
-    if not os.path.exists(html_file):
-        print(f"Error: Could not find {html_file}. Run the scraper first.")
-        return
+    Docstring for scrape_html_ud
+        
+        scrape_html_ud()
+            Process at "https://www.marketindex.com.au/upcoming-dividends/" URL 
+                -> returns a list of dict with key as the company's code and value as the information (Ex-Date, Amount, Franking, Pay Date, Yield, Price)
+                else returns an empty dict
 
-    with open(html_file, "r", encoding="utf-8") as f:
+    :param html_source: HTML object produced by Firecrawl's API
+    """
+    with open(html_source, "r", encoding="utf-8") as f:
         soup = BeautifulSoup(f, "html.parser")
 
-    # Find the table containing dividend data
     table = None
     for t in soup.find_all("table"):
         if "Code" in t.get_text():
@@ -58,9 +59,10 @@ def process_data(html_file):
     
     if not table:
         print("Error: Could not find dividend table in the HTML file.")
-        return
+        return []
+    
+    big_table = []
 
-    results = []
     rows = table.find_all("tr")
     print(f"Analyzing {len(rows)} rows...")
 
@@ -84,7 +86,7 @@ def process_data(html_file):
             
             # Filter: Only keep rows with a valid dividend amount > 0
             if amount and amount > 0:
-                results.append({
+                big_table.append({
                     "Code": code,
                     "Company": company,
                     "Ex Date": parse_date(ex_date),
@@ -95,14 +97,64 @@ def process_data(html_file):
                 })
         except Exception as e:
             continue
+    
+    print(big_table)
+    return big_table
 
-    if results:
-        df = pd.DataFrame(results)
-        output_file = "asx_dividends_final.csv"
-        df.to_csv(output_file, index=False, encoding='utf-8-sig')
-        print(f"Success: Extracted {len(results)} companies to '{output_file}'")
-    else:
-        print("Final Status: No data extracted. Check if the HTML file is valid.")
+def scrape_html_code(html_source):
+    """
+    Docstring for scrape_html_code
 
-if __name__ == "__main__":
-    process_data()
+        Scrape HTML file for individual 'marketingindex.com.au/{code}/'
+    
+    :param html_source: Description
+    """
+
+
+def complete_table(table: dict):
+    codes = list(table.keys())
+
+    # Iterate over the existing company's code
+    for code in codes:
+        new_url = URL + code
+
+        scrape_html_code()
+
+        print(new_url)
+
+    return
+
+
+def process_data_(html_source):
+    """
+    Docstring for process_data
+
+        scrape_html_ud()
+            Process at /upcoming-dividends/ URL to /{code} URL
+                -> returns a table dict with key as the company's code and value as the information (Ex-Date, Amount, Franking, Pay Date, Yield, Price)
+                else returns an Error object if dict is empty
+        
+        scra()
+        It saves a list of company's code inside a list
+        Iterate over the list to scrape each code for the necessary columns and update the table with the information corresponding to each code (4W, Last (Price))
+    
+    :param html_file: HTML file object from Firecrawl
+    """ 
+
+    # scrape_html_ud()
+    companies = scrape_html_ud(html_source)
+
+    for i in range(len(companies)):
+        return
+    
+    
+
+    # if results:
+    #     df = pd.DataFrame(results)
+    #     output_file = "asx_dividends_final.csv"
+    #     df.to_csv(output_file, index=False, encoding='utf-8-sig')
+    #     print(f"Success: Extracted {len(results)} companies to '{output_file}'")
+    # else:
+    #     print("Final Status: No data extracted. Check if the HTML file is valid.")
+
+scrape_html_ud(os.path.join("./test/upcoming_dividends.html"))
