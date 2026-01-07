@@ -1,0 +1,22 @@
+8/1/2026
+
+What needs to be done in this sprint? (sprint 1)
+- dataTaken.py
+    process_data(): a function to take a html object and turn into a list of Company class directly
+
+- unitTesting.py
+    Testing for individual functions in dataTaken
+
+
+What would we achieved by the end of Sprint 1?
+- A pipeline that can take a request and output a .csv file in the column:
+    + Code
+    + Company's name
+    + Ex-Date
+    + Amount
+    + Franking
+    + Pay Date
+    + Yield
+    + Price / Last (Price)
+    + 4W Volume
+    + Total Value (4W Volume * Last (Price))
