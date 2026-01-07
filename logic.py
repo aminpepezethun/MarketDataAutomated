@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from dotenv import load_dotenv
 from firecrawl import Firecrawl
-from helper import clean_number
+from dataTaken import process_data
 
 # Load .env 
 load_dotenv()
