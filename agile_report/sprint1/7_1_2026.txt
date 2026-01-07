@@ -1,0 +1,14 @@
+What's done:
+- Crawl page: Firecrawl (implemented)
+
+What're the next problems:
+- Frequency of auto updating:
+    Problem:
+        Find the update frequency
+
+    Story:
+        User wants to access to be newest data available. We'll want to know the update frequency, therefore, if the User wants to know the current information, and he's just appears to be in the range before the next update time, and directly be able to access to the db without excessive reloading. 
+
+
+- Database solution? Cloud or local?
+
