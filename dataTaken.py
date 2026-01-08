@@ -1,14 +1,21 @@
-import pandas as pd
 from bs4 import BeautifulSoup
-import os
 from datetime import datetime
+from config import firecrawl
+import pandas as pd
+import os
 import sys
 import io
 
 # Fix encoding for Windows Terminal
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-URL = "https://www.marketindex.com.au/"
+# URLs
+WEB_URL = "https://www.marketindex.com.au/"
+UD_URL = "https://www.marketindex.com.au/upcoming-dividends"
+CODE_TEST_URL = "https://www.marketindex.com.au/asx/xgov"
+
+
+TEST_DIR = './test'
 
 def parse_date(date_str):
     """
@@ -37,7 +44,7 @@ def clean_to_number(text):
     except:
         return None
     
-def scrape_html_ud(html_source) -> list:
+def scrape_html_ud(html_source, type="object") -> list:
     """
     Docstring for scrape_html_ud
         
@@ -46,10 +53,22 @@ def scrape_html_ud(html_source) -> list:
                 -> returns a list of dict with key as the company's code and value as the information (Ex-Date, Amount, Franking, Pay Date, Yield, Price)
                 else returns an empty dict
 
-    :param html_source: HTML object produced by Firecrawl's API
+    :param html_source: HTML object produced by Firecrawl's API or 
     """
-    with open(html_source, "r", encoding="utf-8") as f:
-        soup = BeautifulSoup(f, "html.parser")
+
+    """ 
+        [!!!] ONLY USE type='file' IN TEST to reduce number of tokens being used
+    """
+    if type == "file":
+        if isinstance(html_source, str) and os.path.exists(html_source):
+            with open(html_source, "r", encoding="utf-8") as f:
+                html_text = f.read()
+
+    elif type == 'object':
+        if isinstance(html_source, str) and "<html" in html_source.lower():
+            html_text = html_source
+
+    soup = BeautifulSoup(html_text, "html.parser")
 
     table = None
     for t in soup.find_all("table"):
@@ -62,7 +81,6 @@ def scrape_html_ud(html_source) -> list:
         return []
     
     big_table = []
-
     rows = table.find_all("tr")
     print(f"Analyzing {len(rows)} rows...")
 
@@ -98,34 +116,84 @@ def scrape_html_ud(html_source) -> list:
         except Exception as e:
             continue
     
-    print(big_table)
     return big_table
 
-def scrape_html_code(html_source):
+def extract_price_volume_4w(html_source):
+    """
+    Docstring for extract_price_volume_4w
+
+        Extracts Price, Volume, 4W Volume from code-specific html source
+
+        Returns a dict:
+            {
+                "Price": float | None,
+                "Volume": float | None,
+                "4W Volume": float | None
+            }
+    :param html_source: Description
+    """
+    soup = BeautifulSoup(html_source, "html.parser")
+    
+    # Price
+    price_el = soup.select_one("span[data-quoteapi='price']")
+
+    # Volume
+    vol_el   = soup.select_one("span[data-quoteapi^='volume']")
+    vol4w_el = soup.select_one("span[data-quoteapi^='monthAverageVolume']")
+
+    price = clean_to_number(price_el.get_text(strip=True)) if price_el else None
+    vol   = clean_to_number(vol_el.get_text(strip=True)) if vol_el else None
+    vol4w = clean_to_number(vol4w_el.get_text(strip=True)) if vol4w_el else None
+
+    return {"Price": price, "Volume": vol, "4W Volume": vol4w}
+
+def scrape_html_code(big_table, type='object'):
     """
     Docstring for scrape_html_code
 
-        Scrape HTML file for individual 'marketingindex.com.au/{code}/'
-    
-    :param html_source: Description
+        Scrape HTML file for individual 'marketingindex.com.au/{code}/' and update big_table with:
+            Price, Volume, 4W Volume
+
+    :param code: unique code of a company
+    :param table: dictionary of the previous scrape_html_ud()
     """
-
-
-def complete_table(table: dict):
-    codes = list(table.keys())
+    error_code = []
 
     # Iterate over the existing company's code
-    for code in codes:
-        new_url = URL + code
+    for row in big_table:
+        code = row.get("Code")
+        if not code:
+            continue
+    
+        code_l = code.lower()
+        code_url = f"{WEB_URL}asx/{code_l}"
 
-        scrape_html_code()
+        object = firecrawl.scrape(
+            url=code_url,
+            formats=['html']
+        )
 
-        print(new_url)
+        html_source = object['html']
 
-    return
+        if not html_source:
+            error_code.append(code_l)
+        
+        pvv = extract_price_volume_4w(html_source)
+
+        # Add Price, Volumne, 4W Volume to big_table
+        row.update(pvv)
+        
+    # Print Error (if existed)
+    if error_code:
+        print(f"[ERROR] There has been issued with {len(error_code)} codes: ")
+        for error in error_code:
+            print(f"Code {error} failed to extract from the URL")
+    
+    return big_table
 
 
-def process_data_(html_source):
+
+def process_data():
     """
     Docstring for process_data
 
@@ -140,21 +208,50 @@ def process_data_(html_source):
     
     :param html_file: HTML file object from Firecrawl
     """ 
+    object = firecrawl.scrape(
+        url = UD_URL,
+        formats=['html']  
+    )
 
-    # scrape_html_ud()
-    companies = scrape_html_ud(html_source)
-
-    for i in range(len(companies)):
+    html_source_ud = object['html']
+    big_table = scrape_html_ud(html_source_ud)
+    if not big_table:
+        print("[ERROR] Step 1 of process_data() failed to extract big table data")
         return
-    
-    
 
-    # if results:
-    #     df = pd.DataFrame(results)
-    #     output_file = "asx_dividends_final.csv"
-    #     df.to_csv(output_file, index=False, encoding='utf-8-sig')
-    #     print(f"Success: Extracted {len(results)} companies to '{output_file}'")
-    # else:
-    #     print("Final Status: No data extracted. Check if the HTML file is valid.")
+    completed_big_table = scrape_html_code(big_table)
+    if completed_big_table == big_table:
+        print("[ERROR] Step 2 of process_data() faield: there were error since no further data being added to big_table data")
+        return
 
-scrape_html_ud(os.path.join("./test/upcoming_dividends.html"))
+    return completed_big_table
+    
+def save_table_to_csv(big_table):
+    """
+    Docstring for save_table_to_csv
+    
+    :param big_table: big_table dict 
+    """
+
+    df = pd.DataFrame(big_table)
+    df.to_csv("asx_dividends.csv", index=False, encoding='utf-8-sig')
+    print(f"Saved {len(df)} rows to asx_dividends_final.csv")
+
+
+
+
+
+
+# ------------------------------------------------------------------------------- #
+
+# [!!!] TEST FUNCTION TO SAVE FORMAT FOR CODE-SPECIFIC HTML FILES
+def save_test_html(html_source, code):
+    os.makedirs(TEST_DIR, exist_ok=True)
+
+    file_name = f"test_html_{code}.html"
+    file_path = os.path.join(TEST_DIR, file_name)
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(html_source)
+    
+    print(f"Successfully saved {file_name} to {TEST_DIR}")
